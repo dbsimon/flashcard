@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>腦霧救星 v41</title>
+  <title>腦霧救星 v43</title>
   <style>
     :root{
       --bg:#f4f7fb;--surface:#ffffff;--surface-2:#f8fafc;--line:#e2e8f0;--text:#0f172a;--muted:#64748b;
@@ -1212,6 +1212,86 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
   window.addEventListener('resize', closeMenus);
   window.addEventListener('scroll', closeMenus, true);
   window.__closeFolderMenus = closeMenus;
+})();
+</script>
+
+
+<script id="v43-mobile-review-fix">
+(function(){
+  function safeDate(raw){
+    if(!raw) return null;
+    if(raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw;
+    const txt=String(raw).trim();
+    if(!txt) return null;
+    let d=new Date(txt);
+    if(!Number.isNaN(d.getTime())) return d;
+    d=new Date(txt.replace(/-/g,'/').replace('T',' ').replace(/Z$/,''));
+    if(!Number.isNaN(d.getTime())) return d;
+    return null;
+  }
+  function currentViewCards(){
+    try{
+      const active=state.ui && state.ui.activeFolderId;
+      const q=((state.ui && state.ui.search) || '').trim().toLowerCase();
+      const box=((state.ui && state.ui.boxFilter) || 'all');
+      const cards=(state.data && Array.isArray(state.data.cards)) ? state.data.cards : [];
+      return cards.filter(c=>{
+        if(active && c.folderId!==active) return false;
+        if(box!=='all' && String(c.box)!==String(box)) return false;
+        if(!q) return true;
+        return String(c.front||'').toLowerCase().includes(q) || String(c.back||'').toLowerCase().includes(q);
+      });
+    }catch(err){ return []; }
+  }
+  function dueCardsForReview(){
+    const now=Date.now();
+    return currentViewCards().filter(c=>{
+      if(Number(c.box)===5) return false;
+      const d=safeDate(c.dueAt);
+      return !c.dueAt || !d || d.getTime()<=now;
+    });
+  }
+  function openReviewScreen(){
+    const s=document.getElementById('review-screen');
+    if(!s) return;
+    if(typeof setReviewMode==='function') setReviewMode(true);
+    s.classList.add('active','review-open');
+    s.style.display='grid';
+    s.style.pointerEvents='auto';
+    s.style.zIndex='1000';
+    document.body.style.overflow='hidden';
+    if(state && state.ui) state.ui.review=true;
+  }
+  function robustStartReview(e){
+    if(e){ e.preventDefault(); e.stopPropagation(); }
+    try{
+      const queue=dueCardsForReview().sort(()=>Math.random()-.5);
+      state.ui.reviewQueue=queue;
+      state.ui.reviewIndex=0;
+      openReviewScreen();
+      if(typeof renderReview==='function') renderReview();
+    }catch(err){
+      console.error('v43 review start failed', err);
+    }
+  }
+  function replaceLauncher(oldId,newId){
+    const old=document.getElementById(oldId);
+    if(!old || old.dataset.v43wired==='1') return;
+    const clone=old.cloneNode(true);
+    clone.id=newId;
+    clone.dataset.v43wired='1';
+    old.replaceWith(clone);
+    clone.addEventListener('click', robustStartReview);
+  }
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      try{
+        if(typeof startReview==='function') startReview = robustStartReview;
+        replaceLauncher('btn-review','btn-review-v43');
+        replaceLauncher('fab-review','fab-review-v43');
+      }catch(err){ console.error(err); }
+    }, 900);
+  });
 })();
 </script>
 
