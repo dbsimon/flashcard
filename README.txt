@@ -106,3 +106,8 @@ Copyright (c) Westdoor Streetson 2026
 
 Version 43 note
 - Review launch was hardened for iPhone/mobile Safari by replacing the legacy start-review button path with a single clean launcher and a more tolerant due-date parser.
+
+
+Version 44 notes
+- Fixed review advancing so cards no longer get skipped because of duplicate answer-button handlers.
+- Added a Review order selector with Random and Sequence modes.

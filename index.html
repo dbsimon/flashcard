@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>腦霧救星 v43</title>
+  <title>腦霧救星 v44</title>
   <style>
     :root{
       --bg:#f4f7fb;--surface:#ffffff;--surface-2:#f8fafc;--line:#e2e8f0;--text:#0f172a;--muted:#64748b;
@@ -341,6 +341,18 @@ html[data-theme="dark"] .folder-menu{background:#0f172a}
 .sidebar{z-index:20!important;overflow:visible!important}
 .main{z-index:1!important}
 .shell{overflow:visible!important}
+</style>
+
+
+<style id="v44-review-order-ui">
+.review-order-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.review-order-label{font-size:12px;color:var(--muted);font-weight:800}
+.review-order-select{min-height:40px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0 12px;font-weight:800}
+@media (max-width:720px){
+  .primary-actions{flex-wrap:wrap}
+  .review-order-wrap{width:100%;justify-content:flex-end}
+  .review-order-select{width:140px}
+}
 </style>
 
 </head>
@@ -1291,6 +1303,151 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
         replaceLauncher('fab-review','fab-review-v43');
       }catch(err){ console.error(err); }
     }, 900);
+  });
+})();
+</script>
+
+
+<script id="v44-review-flow-fix">
+(function(){
+  function safeDate(raw){
+    if(!raw) return null;
+    const txt=String(raw).trim();
+    if(!txt) return null;
+    let d=new Date(txt);
+    if(!Number.isNaN(d.getTime())) return d;
+    d=new Date(txt.replace(/-/g,'/').replace('T',' ').replace(/Z$/,''));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  function currentCards(){
+    const active=state.ui && state.ui.activeFolderId;
+    const q=((state.ui && state.ui.search) || '').trim().toLowerCase();
+    const box=((state.ui && state.ui.boxFilter) || 'all');
+    const cards=(state.data && Array.isArray(state.data.cards)) ? state.data.cards.slice() : [];
+    return cards.filter(c=>{
+      if(active && c.folderId!==active) return false;
+      if(box!=='all' && String(c.box)!==String(box)) return false;
+      if(!q) return true;
+      return String(c.front||'').toLowerCase().includes(q) || String(c.back||'').toLowerCase().includes(q);
+    });
+  }
+  function dueCards(){
+    const now=Date.now();
+    return currentCards().filter(c=>{
+      if(Number(c.box)===5) return false;
+      const d=safeDate(c.dueAt);
+      return !c.dueAt || !d || d.getTime()<=now;
+    });
+  }
+  function shuffle(arr){
+    const out=arr.slice();
+    for(let i=out.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      const t=out[i]; out[i]=out[j]; out[j]=t;
+    }
+    return out;
+  }
+  function getReviewOrder(){
+    const settings=(state.data && state.data.settings) || {};
+    return settings.reviewOrder==='sequence' ? 'sequence' : 'random';
+  }
+  function buildQueue(){
+    const base=dueCards();
+    return getReviewOrder()==='sequence' ? base : shuffle(base);
+  }
+  function openReviewScreen(){
+    const s=document.getElementById('review-screen');
+    if(!s) return;
+    if(typeof setReviewMode==='function') setReviewMode(true);
+    s.classList.add('active','review-open');
+    s.style.display='grid';
+    s.style.pointerEvents='auto';
+    s.style.zIndex='1000';
+    document.body.style.overflow='hidden';
+    if(state && state.ui) state.ui.review=true;
+  }
+  async function persistSilent(){
+    if(typeof saveData==='function'){
+      await saveData();
+    }
+    if(typeof renderAll==='function') renderAll();
+  }
+  function robustStartReview(e){
+    if(e){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
+    try{
+      state.ui.reviewBusy=false;
+      state.ui.reviewQueue=buildQueue();
+      state.ui.reviewIndex=0;
+      openReviewScreen();
+      if(typeof renderReview==='function') renderReview();
+    }catch(err){ console.error('v44 start review failed', err); }
+  }
+  async function advanceReview(kind){
+    if(!state || !state.ui) return;
+    if(state.ui.reviewBusy) return;
+    const idx=Number(state.ui.reviewIndex||0);
+    const queue=Array.isArray(state.ui.reviewQueue) ? state.ui.reviewQueue : [];
+    const card=queue[idx];
+    if(!card) return;
+    state.ui.reviewBusy=true;
+    try{
+      if(typeof animateDismiss==='function') await animateDismiss(kind);
+      if(kind==='yes') card.box=Math.min(Number(card.box||1)+1,5);
+      card.reviewCount=Number(card.reviewCount||0)+1;
+      card.lastReviewedAt=typeof nowIso==='function' ? nowIso() : new Date().toISOString();
+      card.updatedAt=typeof nowIso==='function' ? nowIso() : new Date().toISOString();
+      card.dueAt=Number(card.box)===5 ? '' : (typeof dueAtForBox==='function' ? dueAtForBox(card.box) : '');
+      state.ui.reviewIndex=idx+1;
+      await persistSilent();
+      if(typeof renderReview==='function') renderReview();
+    }catch(err){
+      console.error('v44 review advance failed', err);
+    } finally {
+      state.ui.reviewBusy=false;
+    }
+  }
+  function robustReviewNo(e){ if(e){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } return advanceReview('no'); }
+  function robustReviewYes(e){ if(e){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation && e.stopImmediatePropagation(); } return advanceReview('yes'); }
+  function replaceButton(id, handler){
+    const old=document.getElementById(id);
+    if(!old) return null;
+    const clone=old.cloneNode(true);
+    old.replaceWith(clone);
+    clone.addEventListener('click', handler, true);
+    clone.addEventListener('pointerup', handler, true);
+    return clone;
+  }
+  function ensureOrderControl(){
+    const host=document.querySelector('.primary-actions');
+    if(!host || document.getElementById('review-order-select')) return;
+    const wrap=document.createElement('div');
+    wrap.className='review-order-wrap';
+    wrap.innerHTML='<span class="review-order-label">Review order</span><select id="review-order-select" class="review-order-select"><option value="random">Random</option><option value="sequence">Sequence</option></select>';
+    host.appendChild(wrap);
+    const select=wrap.querySelector('select');
+    select.value=getReviewOrder();
+    select.addEventListener('change', async function(){
+      state.data.settings=state.data.settings||{};
+      state.data.settings.reviewOrder=this.value;
+      if(typeof saveData==='function') await saveData();
+    });
+  }
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      try{
+        state.data.settings=state.data.settings||{};
+        if(!state.data.settings.reviewOrder) state.data.settings.reviewOrder='random';
+        if(typeof startReview==='function') startReview=robustStartReview;
+        if(typeof reviewNo==='function') reviewNo=robustReviewNo;
+        if(typeof reviewYes==='function') reviewYes=robustReviewYes;
+        replaceButton('btn-review', robustStartReview);
+        replaceButton('fab-review', robustStartReview);
+        replaceButton('btn-no', robustReviewNo);
+        replaceButton('btn-yes', robustReviewYes);
+        ensureOrderControl();
+        if(typeof saveData==='function') saveData();
+      }catch(err){ console.error(err); }
+    }, 1200);
   });
 })();
 </script>
