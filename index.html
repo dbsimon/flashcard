@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>腦霧救星 v34</title>
+  <title>腦霧救星 v41</title>
   <style>
     :root{
       --bg:#f4f7fb;--surface:#ffffff;--surface-2:#f8fafc;--line:#e2e8f0;--text:#0f172a;--muted:#64748b;
@@ -319,41 +319,28 @@ html[data-theme="light"] .review-empty .empty-copy{color:#475569}
 </style>
 
 
-<style id="v32-folder-compact-menu">
-.folder-list-compact{display:flex;flex-direction:column;gap:10px}
-.folder-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 12px 12px 14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.82);box-shadow:var(--shadow)}
+<style id="v40-folder-compact-menu">
+#folder-list{overflow:visible!important}
+.folder-list-compact{display:flex;flex-direction:column;gap:10px;overflow:visible!important}
+.folder-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 12px 12px 14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.82);box-shadow:var(--shadow);overflow:visible!important;position:relative}
 html[data-theme="dark"] .folder-row{background:rgba(15,23,42,.55)}
 .folder-row-main{min-width:0;cursor:pointer}
 .folder-row-title{font-size:15px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .folder-row-meta{margin-top:4px;font-size:12px;color:var(--muted);font-weight:700}
-.folder-row-actions{position:relative}
+.folder-row-actions{position:relative;overflow:visible!important}
 .folder-menu-btn{min-width:42px;min-height:42px;border-radius:14px;border:1px solid var(--line);background:#fff;font-size:22px;line-height:1;color:var(--ink);box-shadow:var(--shadow)}
 html[data-theme="dark"] .folder-menu-btn{background:#0f172a;color:#e2e8f0}
-.folder-menu{position:absolute;right:0;top:calc(100% + 6px);display:none;min-width:148px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);z-index:90}
+.folder-menu-btn[aria-expanded="true"]{background:var(--primary-soft);border-color:transparent;color:#1d4ed8}
+.folder-menu{position:fixed!important;display:none;min-width:148px;max-width:min(220px,calc(100vw - 24px));padding:8px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);z-index:2147483647!important}
 html[data-theme="dark"] .folder-menu{background:#0f172a}
 .folder-menu.show{display:grid;gap:6px}
 .folder-menu button{width:100%;text-align:left;border:0;background:transparent;padding:10px 12px;border-radius:12px;font-weight:800;color:var(--ink)}
 .folder-menu button:hover{background:rgba(37,99,235,.08)}
 .folder-menu button.danger{color:#b91c1c}
-</style>
-
-
-<style id="v33-folder-menu-overlay-fix">
-#folder-list{overflow:visible!important}
-.folder-list-compact{overflow:visible!important}
-.folder-row{overflow:visible!important;position:relative}
-.folder-row-actions{position:relative;overflow:visible!important}
-.folder-menu{position:fixed!important;min-width:148px;max-width:min(220px,calc(100vw - 24px));z-index:9999!important}
-.sidebar{overflow:visible!important}
-.shell{overflow:visible!important}
-</style>
-
-
-<style id="v34-layer-order-fix">
 .app,.shell,.sidebar,.main,.topbar,.toolbar,.stats,.content{position:relative}
-.sidebar{z-index:20!important}
+.sidebar{z-index:20!important;overflow:visible!important}
 .main{z-index:1!important}
-.folder-menu{z-index:2147483647!important}
+.shell{overflow:visible!important}
 </style>
 
 </head>
@@ -1041,13 +1028,12 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
 </script>
 
 
-<script id="v32-folder-compact-menu">
+<script id="v40-folder-compact-menu">
 (function(){
   function getState(){ try { return state; } catch(e){ return null; } }
   function getRefs(){ try { return el; } catch(e){ return null; } }
   function escapeHtml(v){ return String(v??'').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
   function cardCount(folderId, cards){ return cards.filter(c=>c.folderId===folderId).length; }
-  function closeMenus(){ document.querySelectorAll('.folder-menu.show').forEach(m=>m.classList.remove('show')); }
   function renderCompactFolders(){
     const st=getState(), refs=getRefs();
     if(!st||!refs||!refs.folderList) return false;
@@ -1065,7 +1051,7 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
           <div class="folder-row-meta">${count} card${count===1?'':'s'}</div>
         </div>
         <div class="folder-row-actions">
-          <button class="folder-menu-btn" data-folder-menu-btn="${f.id}" aria-label="More actions">⋯</button>
+          <button class="folder-menu-btn" data-folder-menu-btn="${f.id}" aria-expanded="false" aria-label="More actions">⋯</button>
           <div class="folder-menu" data-folder-menu="${f.id}">
             <button data-open-folder="${f.id}">Open</button>
             <button data-edit-folder="${f.id}">Rename</button>
@@ -1077,23 +1063,16 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
 
     refs.folderList.querySelectorAll('[data-open-folder]').forEach(b=>b.addEventListener('click',e=>{
       e.preventDefault(); e.stopPropagation();
-      closeMenus();
+      if(window.__closeFolderMenus) window.__closeFolderMenus();
       if(typeof selectFolder==='function') selectFolder(b.dataset.openFolder); else { st.ui.activeFolderId=b.dataset.openFolder; try{ renderAll(); }catch(err){} }
     }));
     refs.folderList.querySelectorAll('[data-edit-folder]').forEach(b=>b.addEventListener('click',e=>{
-      e.preventDefault(); e.stopPropagation(); closeMenus();
+      e.preventDefault(); e.stopPropagation(); if(window.__closeFolderMenus) window.__closeFolderMenus();
       if(typeof openFolderModal==='function') openFolderModal(b.dataset.editFolder);
     }));
     refs.folderList.querySelectorAll('[data-delete-folder]').forEach(b=>b.addEventListener('click',e=>{
-      e.preventDefault(); e.stopPropagation(); closeMenus();
+      e.preventDefault(); e.stopPropagation(); if(window.__closeFolderMenus) window.__closeFolderMenus();
       if(typeof deleteFolder==='function') deleteFolder(b.dataset.deleteFolder);
-    }));
-    refs.folderList.querySelectorAll('[data-folder-menu-btn]').forEach(b=>b.addEventListener('click',e=>{
-      e.preventDefault(); e.stopPropagation();
-      const menu=refs.folderList.querySelector(`[data-folder-menu="${b.dataset.folderMenuBtn}"]`);
-      const open=menu&&menu.classList.contains('show');
-      closeMenus();
-      if(menu && !open) menu.classList.add('show');
     }));
     refs.folderList.querySelectorAll('.folder-row-main').forEach(b=>b.addEventListener('keydown',e=>{
       if(e.key==='Enter' || e.key===' '){ e.preventDefault(); b.click(); }
@@ -1101,82 +1080,138 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
     return true;
   }
   function patchFolderRender(){
-    if(typeof renderFolders==='function' && !renderFolders.__v32patched){
+    if(typeof renderFolders==='function' && !renderFolders.__v40patched){
       const orig=renderFolders;
       const wrapped=function(){ const r=orig.apply(this,arguments); renderCompactFolders(); return r; };
-      wrapped.__v32patched=true;
+      wrapped.__v40patched=true;
       renderFolders=wrapped;
     }
   }
-  document.addEventListener('click',e=>{ if(!e.target.closest('.folder-row-actions')) closeMenus(); });
   window.addEventListener('load',()=>setTimeout(()=>{ patchFolderRender(); renderCompactFolders(); },700));
 })();
 </script>
 
 
-<script id="v33-folder-menu-overlay-fix">
+<script id="v40-sync-fix">
 (function(){
-  function closeMenus(){
-    document.querySelectorAll('.folder-menu.show').forEach(m=>{
-      m.classList.remove('show');
-      m.style.left=''; m.style.top=''; m.style.right='';
-    });
+  function normalizeSyncUrl(raw){
+    let url=String(raw||'').trim();
+    if(!url) return '';
+    if(/^https:\/\/script\.google\.com\/macros\/s\//i.test(url) && !/\/exec(?:[?#]|$)/i.test(url)) url=url.replace(/\/?$/,'/exec');
+    return url;
   }
-  function placeMenu(btn, menu){
-    if(!btn || !menu) return;
-    const r=btn.getBoundingClientRect();
-    menu.style.display='grid';
-    menu.style.visibility='hidden';
-    const mr=menu.getBoundingClientRect();
-    const pad=10;
-    let left=Math.min(r.right - mr.width, window.innerWidth - mr.width - pad);
-    left=Math.max(pad, left);
-    let top=r.bottom + 6;
-    if(top + mr.height > window.innerHeight - pad){
-      top=Math.max(pad, r.top - mr.height - 6);
-    }
-    menu.style.left=left+'px';
-    menu.style.top=top+'px';
-    menu.style.visibility='visible';
-  }
-  function openMenu(btn){
-    const id=btn && btn.dataset ? btn.dataset.folderMenuBtn : '';
-    if(!id) return;
-    const menu=document.querySelector(`[data-folder-menu="${id}"]`);
-    if(!menu) return;
-    const wasOpen=menu.classList.contains('show');
-    closeMenus();
-    if(wasOpen) return;
-    menu.classList.add('show');
-    placeMenu(btn, menu);
-  }
-  document.addEventListener('click', function(e){
-    const btn=e.target.closest('[data-folder-menu-btn]');
-    const inside=e.target.closest('.folder-menu');
-    if(btn){
-      e.preventDefault();
-      e.stopPropagation();
-      openMenu(btn);
-      return;
-    }
-    if(!inside) closeMenus();
-  }, true);
-  window.addEventListener('resize', closeMenus);
-  window.addEventListener('scroll', closeMenus, true);
+  const __saveSyncSettings_v40 = saveSyncSettings;
+  saveSyncSettings = async function(){
+    el.syncUrl.value = normalizeSyncUrl(el.syncUrl.value);
+    await __saveSyncSettings_v40.apply(this, arguments);
+  };
+  runPull = async function(){
+    const url=normalizeSyncUrl(state.data.settings.syncUrl||'');
+    const token=(state.data.settings.syncToken||'').trim();
+    if(!url||!token) throw new Error('Open Sync Settings first');
+    state.data.settings.syncUrl=url;
+    const target=`${url}${url.includes('?')?'&':'?'}mode=pull&token=${encodeURIComponent(token)}&_ts=${Date.now()}`;
+    const res=await fetch(target,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',redirect:'follow',headers:{'Accept':'application/json,text/plain,*/*'}});
+    const text=await res.text();
+    if(!res.ok) throw new Error(`Pull HTTP ${res.status}`);
+    let data;
+    try{ data=JSON.parse(text); }catch(err){ throw new Error('Pull returned non-JSON response. Check GAS deployment / permissions.'); }
+    if(!data.ok) throw new Error(data.error||'Pull failed');
+    return data;
+  };
+  runPush = async function(){
+    const url=normalizeSyncUrl(state.data.settings.syncUrl||'');
+    const token=(state.data.settings.syncToken||'').trim();
+    if(!url||!token) throw new Error('Open Sync Settings first');
+    state.data.settings.syncUrl=url;
+    const body=new URLSearchParams();
+    body.set('mode','push');
+    body.set('token',token);
+    body.set('nonce',uid('push'));
+    body.set('payload',JSON.stringify(syncPayload()));
+    const res=await fetch(url,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'follow',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8','Accept':'application/json,text/plain,*/*'},body:body.toString()});
+    const text=await res.text();
+    if(!res.ok) throw new Error(`Push HTTP ${res.status}`);
+    let data;
+    try{ data=JSON.parse(text); }catch(err){ throw new Error('Push returned non-JSON response. Check GAS deployment / permissions.'); }
+    if(!data.ok) throw new Error(data.error||'Push failed');
+    return data;
+  };
 })();
 </script>
 
 
-<script id="v34-layer-order-fix">
+<script id="v41-folder-menu-controller">
 (function(){
-  function ensureMenuOnTop(){
-    document.querySelectorAll('.folder-menu').forEach(menu=>{
-      menu.style.zIndex='2147483647';
-      menu.style.position='fixed';
-    });
+  function menus(){ return Array.from(document.querySelectorAll('.folder-menu[data-folder-menu]')); }
+  function buttons(){ return Array.from(document.querySelectorAll('[data-folder-menu-btn]')); }
+  function getMenu(id){ return document.querySelector(`.folder-menu[data-folder-menu="${id}"]`); }
+  function isOpen(menu){ return !!(menu && menu.classList.contains('show')); }
+  function position(btn, menu){
+    menu.classList.add('show');
+    menu.style.visibility='hidden';
+    const br=btn.getBoundingClientRect();
+    const mr=menu.getBoundingClientRect();
+    const pad=10;
+    let left=Math.min(br.right - mr.width, window.innerWidth - mr.width - pad);
+    left=Math.max(pad, left);
+    let top=br.bottom + 8;
+    if(top + mr.height > window.innerHeight - pad) top=Math.max(pad, br.top - mr.height - 8);
+    menu.style.left=left+'px';
+    menu.style.top=top+'px';
+    menu.style.visibility='visible';
   }
-  window.addEventListener('load', ()=>setTimeout(ensureMenuOnTop, 500));
-  document.addEventListener('click', ensureMenuOnTop, true);
+  function closeMenus(){
+    menus().forEach(menu=>{
+      menu.classList.remove('show');
+      menu.style.left='';
+      menu.style.top='';
+      menu.style.visibility='';
+    });
+    buttons().forEach(btn=>btn.setAttribute('aria-expanded','false'));
+  }
+  function toggleFromButton(btn){
+    const id=btn.dataset.folderMenuBtn;
+    const menu=getMenu(id);
+    if(!menu) return;
+    const wasOpen=isOpen(menu);
+    closeMenus();
+    if(wasOpen) return;
+    btn.setAttribute('aria-expanded','true');
+    position(btn, menu);
+  }
+  function findBtn(target){ return target.closest && target.closest('[data-folder-menu-btn]'); }
+  function inMenu(target){ return !!(target.closest && target.closest('.folder-menu[data-folder-menu]')); }
+  document.addEventListener('pointerup', function(e){
+    const btn=findBtn(e.target);
+    if(btn){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toggleFromButton(btn);
+      return;
+    }
+    if(!inMenu(e.target) && document.querySelector('.folder-menu.show')) closeMenus();
+  }, true);
+  document.addEventListener('pointerdown', function(e){
+    if(findBtn(e.target) || inMenu(e.target)) return;
+    if(document.querySelector('.folder-menu.show')) closeMenus();
+  }, true);
+  document.addEventListener('click', function(e){
+    const btn=findBtn(e.target);
+    if(btn){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+  document.addEventListener('focusin', function(e){
+    if(document.querySelector('.folder-menu.show') && !inMenu(e.target) && !findBtn(e.target)) closeMenus();
+  }, true);
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && document.querySelector('.folder-menu.show')){ e.preventDefault(); closeMenus(); }
+  }, true);
+  window.addEventListener('resize', closeMenus);
+  window.addEventListener('scroll', closeMenus, true);
+  window.__closeFolderMenus = closeMenus;
 })();
 </script>
 

@@ -1,93 +1,76 @@
-const SHEET_FOLDERS = 'Folders';
-const SHEET_CARDS = 'Cards';
-const SYNC_TOKEN = 'change-this-token';
+const SHEET_NAME = 'leitner_sync';
+const REQUIRED_HEADERS = ['token','payload_json','updated_at'];
 
 function doGet(e) {
-  ensureSheets_();
-  const mode = str_(e && e.parameter && e.parameter.mode);
-  const token = str_(e && e.parameter && e.parameter.token);
-  const nonce = str_(e && e.parameter && e.parameter.nonce);
-  if (!isAuthorized_(token)) return bridgeResponse_({ ok:false, error:'Unauthorized', nonce:nonce });
-  if (mode === 'pull') return bridgeResponse_({ ok:true, nonce:nonce, dataset:getDataset_(), source:'leitner-gas-sync' });
-  if (mode === 'ping') return bridgeResponse_({ ok:true, nonce:nonce, message:'pong', source:'leitner-gas-sync' });
-  return HtmlService.createHtmlOutput('<!doctype html><html><body style="font-family:sans-serif;padding:24px">Leitner GAS Sync is running.</body></html>')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return handleRequest_(e, 'GET');
 }
 
 function doPost(e) {
-  ensureSheets_();
-  const p = (e && e.parameter) || {};
-  const mode = str_(p.mode);
-  const token = str_(p.token);
-  const nonce = str_(p.nonce);
-  if (!isAuthorized_(token)) return bridgeResponse_({ ok:false, error:'Unauthorized', nonce:nonce });
+  return handleRequest_(e, 'POST');
+}
+
+function handleRequest_(e, method) {
   try {
-    if (mode === 'push') {
-      const payload = JSON.parse(str_(p.payload) || '{}');
-      writeDataset_(payload);
-      return bridgeResponse_({ ok:true, nonce:nonce, message:'Cloud sync complete', source:'leitner-gas-sync' });
+    const params = (e && e.parameter) || {};
+    const mode = String(params.mode || '').trim().toLowerCase();
+    const token = String(params.token || '').trim();
+    if (!token) return json_({ ok:false, error:'Missing token' });
+
+    const sheet = getSheet_();
+    const storedToken = String(sheet.getRange('A2').getValue() || '').trim();
+    if (!storedToken) return json_({ ok:false, error:'No token configured in sheet A2' });
+    if (token !== storedToken) return json_({ ok:false, error:'Invalid token' });
+
+    if (mode === 'pull') {
+      const raw = String(sheet.getRange('B2').getValue() || '').trim();
+      if (!raw) return json_({ ok:true, dataset:{ folders:[], cards:[], updatedAt:'' } });
+      const dataset = JSON.parse(raw);
+      return json_({ ok:true, dataset:dataset });
     }
-    return bridgeResponse_({ ok:false, error:'Unsupported mode', nonce:nonce, source:'leitner-gas-sync' });
+
+    if (mode === 'push') {
+      const payload = String(params.payload || '').trim();
+      if (!payload) return json_({ ok:false, error:'Missing payload' });
+      const dataset = JSON.parse(payload);
+      validateDataset_(dataset);
+      sheet.getRange('B2').setValue(JSON.stringify(dataset));
+      sheet.getRange('C2').setValue(new Date().toISOString());
+      return json_({ ok:true, message:'Pushed to Google Sheet' });
+    }
+
+    return json_({ ok:false, error:'Unsupported mode' });
   } catch (err) {
-    return bridgeResponse_({ ok:false, error:String(err && err.message || err), nonce:nonce, source:'leitner-gas-sync' });
+    return json_({ ok:false, error:String(err && err.message || err) });
   }
 }
 
-function bridgeResponse_(payload) {
-  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
-  const html = '<!doctype html><html><body><script>' +
-    'window.parent && window.parent.postMessage(' + json + ', "*");' +
-    'document.body.innerHTML = "Sync response sent.";' +
-    '<' + '/script></body></html>';
-  return HtmlService.createHtmlOutput(html)
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function ensureSheets_() {
+function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let folders = ss.getSheetByName(SHEET_FOLDERS);
-  if (!folders) folders = ss.insertSheet(SHEET_FOLDERS);
-  if (folders.getLastRow() === 0) folders.getRange(1,1,1,4).setValues([['id','name','createdAt','updatedAt']]);
-  let cards = ss.getSheetByName(SHEET_CARDS);
-  if (!cards) cards = ss.insertSheet(SHEET_CARDS);
-  if (cards.getLastRow() === 0) cards.getRange(1,1,1,9).setValues([['id','folderId','front','back','box','dueAt','reviewCount','createdAt','updatedAt']]);
+  let sh = ss.getSheetByName(SHEET_NAME);
+  if (!sh) sh = ss.insertSheet(SHEET_NAME);
+  if (sh.getLastRow() === 0) {
+    sh.getRange('A1:C2').setValues([
+      ['token','payload_json','updated_at'],
+      ['CHANGE_ME','', '']
+    ]);
+  } else {
+    const headers = sh.getRange('A1:C1').getValues()[0];
+    const want = REQUIRED_HEADERS;
+    const mismatch = want.some((h,i) => String(headers[i]||'').trim() !== h);
+    if (mismatch) sh.getRange('A1:C1').setValues([want]);
+    if (!sh.getRange('A2').getValue()) sh.getRange('A2').setValue('CHANGE_ME');
+  }
+  return sh;
 }
 
-function getDataset_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return {
-    folders: readSheetObjects_(ss.getSheetByName(SHEET_FOLDERS)),
-    cards: readSheetObjects_(ss.getSheetByName(SHEET_CARDS)),
-    updatedAt: new Date().toISOString()
-  };
+function validateDataset_(dataset) {
+  if (!dataset || typeof dataset !== 'object') throw new Error('Invalid dataset');
+  if (!Array.isArray(dataset.folders)) throw new Error('Invalid folders array');
+  if (!Array.isArray(dataset.cards)) throw new Error('Invalid cards array');
 }
 
-function writeDataset_(payload) {
-  const folders = Array.isArray(payload && payload.folders) ? payload.folders : [];
-  const cards = Array.isArray(payload && payload.cards) ? payload.cards : [];
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  writeSheetObjects_(ss.getSheetByName(SHEET_FOLDERS), ['id','name','createdAt','updatedAt'], folders);
-  writeSheetObjects_(ss.getSheetByName(SHEET_CARDS), ['id','folderId','front','back','box','dueAt','reviewCount','createdAt','updatedAt'], cards);
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
-
-function readSheetObjects_(sheet) {
-  const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  const headers = values[0].map(String);
-  return values.slice(1).filter(r => r.some(v => String(v) !== '')).map(r => {
-    const obj = {};
-    headers.forEach((h,i) => obj[h] = r[i]);
-    return obj;
-  });
-}
-
-function writeSheetObjects_(sheet, headers, rows) {
-  sheet.clearContents();
-  sheet.getRange(1,1,1,headers.length).setValues([headers]);
-  if (!rows.length) return;
-  const values = rows.map(r => headers.map(h => r[h] == null ? '' : r[h]));
-  sheet.getRange(2,1,values.length,headers.length).setValues(values);
-}
-
-function isAuthorized_(token) { return str_(token) && str_(token) === SYNC_TOKEN; }
-function str_(v) { return v == null ? '' : String(v); }
