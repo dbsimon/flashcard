@@ -1452,5 +1452,91 @@ renderReview=function(){setReviewTheme();return __renderReview_v18()};
 })();
 </script>
 
+<script id="v45-auto-sync">
+(function(){
+  // Automatic Google Sheets sync:
+  //  - Pull once when the page is opened (if sync is configured).
+  //  - Push automatically whenever local data changes (adding a card, edits,
+  //    deletes and review results), debounced so rapid changes coalesce.
+  var autoSyncReady = false;   // becomes true once the startup pull has settled
+  var suppressAutoPush = false; // prevents the lastSyncAt bookkeeping save from re-triggering a push
+  var pushTimer = null;
+  var AUTO_PUSH_DELAY = 1200;
+
+  function syncConfigured(){
+    var s = (state && state.data && state.data.settings) || {};
+    return !!((s.syncUrl || '').trim() && (s.syncToken || '').trim());
+  }
+
+  // Keep a handle to the unwrapped saver so sync bookkeeping never loops.
+  var rawSaveData = saveData;
+  saveData = async function(){
+    var r = await rawSaveData.apply(this, arguments);
+    scheduleAutoPush();
+    return r;
+  };
+
+  function scheduleAutoPush(){
+    if(!autoSyncReady || suppressAutoPush || !syncConfigured()) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){ runAutoPush(); }, AUTO_PUSH_DELAY);
+  }
+
+  async function runAutoPush(){
+    if(!syncConfigured()) return;
+    try{
+      await runPush();
+      suppressAutoPush = true;
+      state.data.settings.lastSyncAt = nowIso();
+      await rawSaveData();
+      if(typeof renderSyncBadge === 'function') renderSyncBadge();
+    }catch(err){
+      console.error('Auto-push failed', err);
+    }finally{
+      suppressAutoPush = false;
+    }
+  }
+
+  async function autoPullOnOpen(){
+    if(!syncConfigured()){ autoSyncReady = true; return; }
+    try{
+      var msg = await runPull();
+      var pulled = msg && msg.dataset;
+      var hasCloud = pulled && ((Array.isArray(pulled.folders) && pulled.folders.length) ||
+                                (Array.isArray(pulled.cards) && pulled.cards.length));
+      if(hasCloud){
+        state.data.folders = Array.isArray(pulled.folders) ? pulled.folders : [];
+        state.data.cards = Array.isArray(pulled.cards) ? pulled.cards : [];
+        state.data.updatedAt = pulled.updatedAt || nowIso();
+        state.data.settings.lastSyncAt = nowIso();
+        suppressAutoPush = true;
+        await rawSaveData();
+        suppressAutoPush = false;
+        if(typeof ensureFolderDefaults === 'function') ensureFolderDefaults();
+        if(typeof ensureActiveFolder === 'function') ensureActiveFolder();
+        if(typeof renderAll === 'function') renderAll();
+        toast('Synced from Google (' + state.data.cards.length + ' cards)');
+        autoSyncReady = true;
+      }else{
+        // Cloud is empty (never pushed). Keep local data and seed the sheet from it.
+        autoSyncReady = true;
+        scheduleAutoPush();
+      }
+    }catch(err){
+      console.error('Auto-pull failed', err);
+      autoSyncReady = true; // still allow pushes so new cards reach Google
+    }
+  }
+
+  // Run the pull right after the app finishes its normal startup.
+  var rawInit = init;
+  init = async function(){
+    var r = await rawInit.apply(this, arguments);
+    await autoPullOnOpen();
+    return r;
+  };
+})();
+</script>
+
 </body>
 </html>
