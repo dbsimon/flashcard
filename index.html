@@ -593,6 +593,16 @@ document.addEventListener('keydown', function(e){
   if(typing || !state.ui.review) return;
   const hasCard = !!(state.ui.reviewQueue && state.ui.reviewQueue[state.ui.reviewIndex]);
   if(!hasCard) return;
+  if(e.key==='ArrowUp' || e.key==='ArrowDown'){
+    const flipped=el.flashcard.classList.contains('flipped');
+    const face=flipped?el.flashcard.querySelector('.face.back'):el.flashcard.querySelector('.face.front');
+    if(face && face.scrollHeight > face.clientHeight){
+      e.preventDefault();
+      const delta=e.key==='ArrowUp'?-40:40;
+      face.scrollBy({top:delta, behavior:'auto'});
+    }
+    return;
+  }
   if(e.key==='1' || e.key==='ArrowLeft'){
     e.preventDefault();
     e.stopImmediatePropagation();
