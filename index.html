@@ -803,8 +803,10 @@
     });
   }
 
-  async function saveData() {
-    state.data.updatedAt = nowIso();
+  async function saveData(touch = true) {
+    // `touch` marks the dataset as changed. Sync bookkeeping saves (e.g. updating
+    // lastSyncAt) pass false so they do not make local data look newer than cloud.
+    if (touch) state.data.updatedAt = nowIso();
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).put({ key: 'dataset', value: state.data });
     return new Promise((resolve, reject) => {
@@ -888,7 +890,7 @@
       await runPush();
       suppressAutoPush = true;
       state.data.settings.lastSyncAt = nowIso();
-      await saveData();
+      await saveData(false);
       renderSyncBadge();
     } catch (err) {
       console.error('Auto-push failed:', err);
@@ -912,19 +914,43 @@
     try {
       const msg = await runPull();
       const pulled = msg?.dataset;
-      if (pulled && (Array.isArray(pulled.folders) || Array.isArray(pulled.cards))) {
-        state.data.folders = Array.isArray(pulled.folders) ? pulled.folders : [];
-        state.data.cards = Array.isArray(pulled.cards) ? pulled.cards : [];
-        state.data.updatedAt = pulled.updatedAt || nowIso();
-        state.data.settings.lastSyncAt = nowIso();
-        suppressAutoPush = true;
-        await saveData();
-        suppressAutoPush = false;
-        ensureDataDefaults();
-        ensureActiveFolder();
-        renderAll();
-        toast(`Synced from Google (${state.data.cards.length} cards)`);
+      if (!pulled || !(Array.isArray(pulled.folders) || Array.isArray(pulled.cards))) { autoSyncReady = true; return; }
+
+      const localAt = Date.parse(state.data.updatedAt || '') || 0;
+      const cloudAt = Date.parse(pulled.updatedAt || '') || 0;
+      const hasLocalCards = (state.data.cards || []).length > 0;
+
+      // If local holds review progress the cloud has not seen yet (e.g. a card was
+      // just mastered but the push had not completed before the tab closed), keep
+      // local and publish it. Otherwise a stale cloud copy would silently revert
+      // cards (for example Recall Box 4 back to Box 5 progress lost).
+      if (hasLocalCards && localAt > cloudAt) {
+        try {
+          await runPush();
+          suppressAutoPush = true;
+          state.data.settings.lastSyncAt = nowIso();
+          await saveData(false);
+          suppressAutoPush = false;
+          renderSyncBadge();
+          toast('Local progress synced to Google');
+        } catch (pushErr) {
+          console.error('Auto-push on open failed:', pushErr);
+        }
+        autoSyncReady = true;
+        return;
       }
+
+      state.data.folders = Array.isArray(pulled.folders) ? pulled.folders : [];
+      state.data.cards = Array.isArray(pulled.cards) ? pulled.cards : [];
+      state.data.updatedAt = pulled.updatedAt || nowIso();
+      state.data.settings.lastSyncAt = nowIso();
+      suppressAutoPush = true;
+      await saveData(false);
+      suppressAutoPush = false;
+      ensureDataDefaults();
+      ensureActiveFolder();
+      renderAll();
+      toast(`Synced from Google (${state.data.cards.length} cards)`);
     } catch (err) {
       console.error('Auto-pull failed:', err);
     } finally {
@@ -1539,7 +1565,7 @@
         state.data.cards = Array.isArray(msg.dataset.cards) ? msg.dataset.cards : [];
         state.data.updatedAt = msg.dataset.updatedAt || nowIso();
         state.data.settings.lastSyncAt = nowIso();
-        await saveData();
+        await saveData(false);
         renderAll();
         toast(`Pulled ${state.data.cards.length} cards`);
       }
@@ -1608,7 +1634,7 @@
           state.data.cards = Array.isArray(msg.dataset.cards) ? msg.dataset.cards : [];
           state.data.updatedAt = msg.dataset.updatedAt || nowIso();
           state.data.settings.lastSyncAt = nowIso();
-          await saveData();
+          await saveData(false);
           renderAll();
           toast(`Pulled ${state.data.cards.length} cards`);
         }
@@ -1619,7 +1645,7 @@
       try {
         const msg = await runPush();
         state.data.settings.lastSyncAt = nowIso();
-        await saveData();
+        await saveData(false);
         renderAll();
         toast(msg.message || 'Pushed to Google');
       } catch (err) { toast(err.message || 'Push failed'); }
